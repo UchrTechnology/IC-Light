@@ -1,6 +1,5 @@
 import os
 import math
-import gradio as gr
 import numpy as np
 import torch
 import safetensors.torch as sf
@@ -8,7 +7,13 @@ import db_examples
 
 from PIL import Image
 from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline
-from diffusers import AutoencoderKL, UNet2DConditionModel, DDIMScheduler, EulerAncestralDiscreteScheduler, DPMSolverMultistepScheduler
+from diffusers import (
+    AutoencoderKL,
+    UNet2DConditionModel,
+    DDIMScheduler,
+    EulerAncestralDiscreteScheduler,
+    DPMSolverMultistepScheduler,
+)
 from diffusers.models.attention_processor import AttnProcessor2_0
 from transformers import CLIPTextModel, CLIPTokenizer
 from briarmbg import BriaRMBG
@@ -21,7 +26,7 @@ import argparse
 
 # 'stablediffusionapi/realistic-vision-v51'
 # 'runwayml/stable-diffusion-v1-5'
-sd15_name = 'stablediffusionapi/realistic-vision-v51'
+sd15_name = "stablediffusionapi/realistic-vision-v51"
 tokenizer = CLIPTokenizer.from_pretrained(sd15_name, subfolder="tokenizer")
 text_encoder = CLIPTextModel.from_pretrained(sd15_name, subfolder="text_encoder")
 vae = AutoencoderKL.from_pretrained(sd15_name, subfolder="vae")
@@ -31,7 +36,13 @@ rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
 # Change UNet
 
 with torch.no_grad():
-    new_conv_in = torch.nn.Conv2d(8, unet.conv_in.out_channels, unet.conv_in.kernel_size, unet.conv_in.stride, unet.conv_in.padding)
+    new_conv_in = torch.nn.Conv2d(
+        8,
+        unet.conv_in.out_channels,
+        unet.conv_in.kernel_size,
+        unet.conv_in.stride,
+        unet.conv_in.padding,
+    )
     new_conv_in.weight.zero_()
     new_conv_in.weight[:, :4, :, :].copy_(unet.conv_in.weight)
     new_conv_in.bias = unet.conv_in.bias
@@ -41,10 +52,10 @@ unet_original_forward = unet.forward
 
 
 def hooked_unet_forward(sample, timestep, encoder_hidden_states, **kwargs):
-    c_concat = kwargs['cross_attention_kwargs']['concat_conds'].to(sample)
+    c_concat = kwargs["cross_attention_kwargs"]["concat_conds"].to(sample)
     c_concat = torch.cat([c_concat] * (sample.shape[0] // c_concat.shape[0]), dim=0)
     new_sample = torch.cat([sample, c_concat], dim=1)
-    kwargs['cross_attention_kwargs'] = {}
+    kwargs["cross_attention_kwargs"] = {}
     return unet_original_forward(new_sample, timestep, encoder_hidden_states, **kwargs)
 
 
@@ -52,10 +63,13 @@ unet.forward = hooked_unet_forward
 
 # Load
 
-model_path = './models/iclight_sd15_fc.safetensors'
+model_path = "./models/iclight_sd15_fc.safetensors"
 
 if not os.path.exists(model_path):
-    download_url_to_file(url='https://huggingface.co/lllyasviel/ic-light/resolve/main/iclight_sd15_fc.safetensors', dst=model_path)
+    download_url_to_file(
+        url="https://huggingface.co/lllyasviel/ic-light/resolve/main/iclight_sd15_fc.safetensors",
+        dst=model_path,
+    )
 
 sd_offset = sf.load_file(model_path)
 sd_origin = unet.state_dict()
@@ -66,7 +80,7 @@ del sd_offset, sd_origin, sd_merged, keys
 
 # Device
 
-device = torch.device('cuda')
+device = torch.device("cuda")
 text_encoder = text_encoder.to(device=device, dtype=torch.float16)
 vae = vae.to(device=device, dtype=torch.bfloat16)
 unet = unet.to(device=device, dtype=torch.float16)
@@ -90,10 +104,7 @@ ddim_scheduler = DDIMScheduler(
 )
 
 euler_a_scheduler = EulerAncestralDiscreteScheduler(
-    num_train_timesteps=1000,
-    beta_start=0.00085,
-    beta_end=0.012,
-    steps_offset=1
+    num_train_timesteps=1000, beta_start=0.00085, beta_end=0.012, steps_offset=1
 )
 
 dpmpp_2m_sde_karras_scheduler = DPMSolverMultistepScheduler(
@@ -102,7 +113,7 @@ dpmpp_2m_sde_karras_scheduler = DPMSolverMultistepScheduler(
     beta_end=0.012,
     algorithm_type="sde-dpmsolver++",
     use_karras_sigmas=True,
-    steps_offset=1
+    steps_offset=1,
 )
 
 # Pipelines
@@ -116,7 +127,7 @@ t2i_pipe = StableDiffusionPipeline(
     safety_checker=None,
     requires_safety_checker=False,
     feature_extractor=None,
-    image_encoder=None
+    image_encoder=None,
 )
 
 i2i_pipe = StableDiffusionImg2ImgPipeline(
@@ -128,7 +139,7 @@ i2i_pipe = StableDiffusionImg2ImgPipeline(
     safety_checker=None,
     requires_safety_checker=False,
     feature_extractor=None,
-    image_encoder=None
+    image_encoder=None,
 )
 
 
@@ -144,7 +155,10 @@ def encode_prompt_inner(txt: str):
         return x[:i] if len(x) >= i else x + [p] * (i - len(x))
 
     tokens = tokenizer(txt, truncation=False, add_special_tokens=False)["input_ids"]
-    chunks = [[id_start] + tokens[i: i + chunk_length] + [id_end] for i in range(0, len(tokens), chunk_length)]
+    chunks = [
+        [id_start] + tokens[i : i + chunk_length] + [id_end]
+        for i in range(0, len(tokens), chunk_length)
+    ]
     chunks = [pad(ck, id_pad, max_length) for ck in chunks]
 
     token_ids = torch.tensor(chunks).to(device=device, dtype=torch.int64)
@@ -193,7 +207,9 @@ def pytorch2numpy(imgs, quant=True):
 
 @torch.inference_mode()
 def numpy2pytorch(imgs):
-    h = torch.from_numpy(np.stack(imgs, axis=0)).float() / 127.0 - 1.0  # so that 127 must be strictly 0.0
+    h = (
+        torch.from_numpy(np.stack(imgs, axis=0)).float() / 127.0 - 1.0
+    )  # so that 127 must be strictly 0.0
     h = h.movedim(-1, 1)
     return h
 
@@ -235,7 +251,22 @@ def run_rmbg(img, sigma=0.0):
 
 
 @torch.inference_mode()
-def process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, bg_source):
+def process(
+    input_fg,
+    prompt,
+    image_width,
+    image_height,
+    num_samples,
+    seed,
+    steps,
+    a_prompt,
+    n_prompt,
+    cfg,
+    highres_scale,
+    highres_denoise,
+    lowres_denoise,
+    bg_source,
+):
     bg_source = BGSource(bg_source)
     input_bg = None
 
@@ -258,56 +289,69 @@ def process(input_fg, prompt, image_width, image_height, num_samples, seed, step
         image = np.tile(gradient, (1, image_width))
         input_bg = np.stack((image,) * 3, axis=-1).astype(np.uint8)
     else:
-        raise 'Wrong initial latent!'
+        raise "Wrong initial latent!"
 
     rng = torch.Generator(device=device).manual_seed(int(seed))
 
     fg = resize_and_center_crop(input_fg, image_width, image_height)
 
     concat_conds = numpy2pytorch([fg]).to(device=vae.device, dtype=vae.dtype)
-    concat_conds = vae.encode(concat_conds).latent_dist.mode() * vae.config.scaling_factor
+    concat_conds = (
+        vae.encode(concat_conds).latent_dist.mode() * vae.config.scaling_factor
+    )
 
-    conds, unconds = encode_prompt_pair(positive_prompt=prompt + ', ' + a_prompt, negative_prompt=n_prompt)
+    conds, unconds = encode_prompt_pair(
+        positive_prompt=prompt + ", " + a_prompt, negative_prompt=n_prompt
+    )
 
     if input_bg is None:
-        latents = t2i_pipe(
-            prompt_embeds=conds,
-            negative_prompt_embeds=unconds,
-            width=image_width,
-            height=image_height,
-            num_inference_steps=steps,
-            num_images_per_prompt=num_samples,
-            generator=rng,
-            output_type='latent',
-            guidance_scale=cfg,
-            cross_attention_kwargs={'concat_conds': concat_conds},
-        ).images.to(vae.dtype) / vae.config.scaling_factor
+        latents = (
+            t2i_pipe(
+                prompt_embeds=conds,
+                negative_prompt_embeds=unconds,
+                width=image_width,
+                height=image_height,
+                num_inference_steps=steps,
+                num_images_per_prompt=num_samples,
+                generator=rng,
+                output_type="latent",
+                guidance_scale=cfg,
+                cross_attention_kwargs={"concat_conds": concat_conds},
+            ).images.to(vae.dtype)
+            / vae.config.scaling_factor
+        )
     else:
         bg = resize_and_center_crop(input_bg, image_width, image_height)
         bg_latent = numpy2pytorch([bg]).to(device=vae.device, dtype=vae.dtype)
         bg_latent = vae.encode(bg_latent).latent_dist.mode() * vae.config.scaling_factor
-        latents = i2i_pipe(
-            image=bg_latent,
-            strength=lowres_denoise,
-            prompt_embeds=conds,
-            negative_prompt_embeds=unconds,
-            width=image_width,
-            height=image_height,
-            num_inference_steps=int(round(steps / lowres_denoise)),
-            num_images_per_prompt=num_samples,
-            generator=rng,
-            output_type='latent',
-            guidance_scale=cfg,
-            cross_attention_kwargs={'concat_conds': concat_conds},
-        ).images.to(vae.dtype) / vae.config.scaling_factor
+        latents = (
+            i2i_pipe(
+                image=bg_latent,
+                strength=lowres_denoise,
+                prompt_embeds=conds,
+                negative_prompt_embeds=unconds,
+                width=image_width,
+                height=image_height,
+                num_inference_steps=int(round(steps / lowres_denoise)),
+                num_images_per_prompt=num_samples,
+                generator=rng,
+                output_type="latent",
+                guidance_scale=cfg,
+                cross_attention_kwargs={"concat_conds": concat_conds},
+            ).images.to(vae.dtype)
+            / vae.config.scaling_factor
+        )
 
     pixels = vae.decode(latents).sample
     pixels = pytorch2numpy(pixels)
-    pixels = [resize_without_crop(
-        image=p,
-        target_width=int(round(image_width * highres_scale / 64.0) * 64),
-        target_height=int(round(image_height * highres_scale / 64.0) * 64))
-    for p in pixels]
+    pixels = [
+        resize_without_crop(
+            image=p,
+            target_width=int(round(image_width * highres_scale / 64.0) * 64),
+            target_height=int(round(image_height * highres_scale / 64.0) * 64),
+        )
+        for p in pixels
+    ]
 
     pixels = numpy2pytorch(pixels).to(device=vae.device, dtype=vae.dtype)
     latents = vae.encode(pixels).latent_dist.mode() * vae.config.scaling_factor
@@ -317,22 +361,27 @@ def process(input_fg, prompt, image_width, image_height, num_samples, seed, step
 
     fg = resize_and_center_crop(input_fg, image_width, image_height)
     concat_conds = numpy2pytorch([fg]).to(device=vae.device, dtype=vae.dtype)
-    concat_conds = vae.encode(concat_conds).latent_dist.mode() * vae.config.scaling_factor
+    concat_conds = (
+        vae.encode(concat_conds).latent_dist.mode() * vae.config.scaling_factor
+    )
 
-    latents = i2i_pipe(
-        image=latents,
-        strength=highres_denoise,
-        prompt_embeds=conds,
-        negative_prompt_embeds=unconds,
-        width=image_width,
-        height=image_height,
-        num_inference_steps=int(round(steps / highres_denoise)),
-        num_images_per_prompt=num_samples,
-        generator=rng,
-        output_type='latent',
-        guidance_scale=cfg,
-        cross_attention_kwargs={'concat_conds': concat_conds},
-    ).images.to(vae.dtype) / vae.config.scaling_factor
+    latents = (
+        i2i_pipe(
+            image=latents,
+            strength=highres_denoise,
+            prompt_embeds=conds,
+            negative_prompt_embeds=unconds,
+            width=image_width,
+            height=image_height,
+            num_inference_steps=int(round(steps / highres_denoise)),
+            num_images_per_prompt=num_samples,
+            generator=rng,
+            output_type="latent",
+            guidance_scale=cfg,
+            cross_attention_kwargs={"concat_conds": concat_conds},
+        ).images.to(vae.dtype)
+        / vae.config.scaling_factor
+    )
 
     pixels = vae.decode(latents).sample
 
@@ -340,45 +389,140 @@ def process(input_fg, prompt, image_width, image_height, num_samples, seed, step
 
 
 @torch.inference_mode()
-def process_relight(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, bg_source):
+def process_relight(
+    input_fg,
+    prompt,
+    image_width,
+    image_height,
+    num_samples,
+    seed,
+    steps,
+    a_prompt,
+    n_prompt,
+    cfg,
+    highres_scale,
+    highres_denoise,
+    lowres_denoise,
+    bg_source,
+):
     input_fg, matting = run_rmbg(input_fg)
-    results = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, bg_source)
+    results = process(
+        input_fg,
+        prompt,
+        image_width,
+        image_height,
+        num_samples,
+        seed,
+        steps,
+        a_prompt,
+        n_prompt,
+        cfg,
+        highres_scale,
+        highres_denoise,
+        lowres_denoise,
+        bg_source,
+    )
     return input_fg, results
 
 
 @torch.inference_mode()
-def process_normal(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, bg_source):
+def process_normal(
+    input_fg,
+    prompt,
+    image_width,
+    image_height,
+    num_samples,
+    seed,
+    steps,
+    a_prompt,
+    n_prompt,
+    cfg,
+    highres_scale,
+    highres_denoise,
+    lowres_denoise,
+    bg_source,
+):
     input_fg, matting = run_rmbg(input_fg)
-    results_n = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "None")
-    #results_l = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Left Light")
-    results_r = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Right Light")
-    results_t = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Top Light")
-    #results_b = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Bottom Light")
-    return input_fg, [((n.astype(np.float32) + r.astype(np.float32) + t.astype(np.float32)) / 3).astype(np.uint8) for n, r, t in zip(results_n, results_r, results_t)]
+    results_n = process(
+        input_fg,
+        prompt,
+        image_width,
+        image_height,
+        num_samples,
+        seed,
+        steps,
+        a_prompt,
+        n_prompt,
+        cfg,
+        highres_scale,
+        highres_denoise,
+        lowres_denoise,
+        "None",
+    )
+    # results_l = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Left Light")
+    results_r = process(
+        input_fg,
+        prompt,
+        image_width,
+        image_height,
+        num_samples,
+        seed,
+        steps,
+        a_prompt,
+        n_prompt,
+        cfg,
+        highres_scale,
+        highres_denoise,
+        lowres_denoise,
+        "Right Light",
+    )
+    results_t = process(
+        input_fg,
+        prompt,
+        image_width,
+        image_height,
+        num_samples,
+        seed,
+        steps,
+        a_prompt,
+        n_prompt,
+        cfg,
+        highres_scale,
+        highres_denoise,
+        lowres_denoise,
+        "Top Light",
+    )
+    # results_b = process(input_fg, prompt, image_width, image_height, num_samples, seed, steps, a_prompt, n_prompt, cfg, highres_scale, highres_denoise, lowres_denoise, "Bottom Light")
+    return input_fg, [
+        (
+            (n.astype(np.float32) + r.astype(np.float32) + t.astype(np.float32)) / 3
+        ).astype(np.uint8)
+        for n, r, t in zip(results_n, results_r, results_t)
+    ]
 
 
 quick_prompts = [
-    'sunshine from window',
-    'neon light, city',
-    'sunset over sea',
-    'golden time',
-    'sci-fi RGB glowing, cyberpunk',
-    'natural lighting',
-    'warm atmosphere, at home, bedroom',
-    'magic lit',
-    'evil, gothic, Yharnam',
-    'light and shadow',
-    'shadow from window',
-    'soft studio lighting',
-    'home atmosphere, cozy bedroom illumination',
-    'neon, Wong Kar-wai, warm'
+    "sunshine from window",
+    "neon light, city",
+    "sunset over sea",
+    "golden time",
+    "sci-fi RGB glowing, cyberpunk",
+    "natural lighting",
+    "warm atmosphere, at home, bedroom",
+    "magic lit",
+    "evil, gothic, Yharnam",
+    "light and shadow",
+    "shadow from window",
+    "soft studio lighting",
+    "home atmosphere, cozy bedroom illumination",
+    "neon, Wong Kar-wai, warm",
 ]
 quick_prompts = [[x] for x in quick_prompts]
 
 
 quick_subjects = [
-    'beautiful woman, detailed face',
-    'handsome man, detailed face',
+    "beautiful woman, detailed face",
+    "handsome man, detailed face",
 ]
 quick_subjects = [[x] for x in quick_subjects]
 
@@ -392,23 +536,55 @@ class BGSource(Enum):
 
 
 # Setup argument parser  元のコードのblock以降を次のように変更（+ impoortにargparse追加）
-parser = argparse.ArgumentParser(description="IC-Light (Relighting with Foreground Condition)")
-parser.add_argument('--input_dir', type=str, required=True, help="Path to the input foreground dir")
-parser.add_argument('--output_dir', type=str, required=True, help="Path to output dir")
-parser.add_argument('--prompt', type=str, required=True, help="Prompt for text-to-image generation")
-parser.add_argument('--bg_source', type=str, choices=[e.value for e in BGSource], default='None', help="Lighting Preference (Initial Latent)")
-parser.add_argument('--num_samples', type=int, default=1, help="Number of generated images")
-parser.add_argument('--seed', type=int, default=12345, help="Random seed")
-parser.add_argument('--image_width', type=int, default=512, help="Width of the generated image")
-parser.add_argument('--image_height', type=int, default=640, help="Height of the generated image")
-parser.add_argument('--steps', type=int, default=25, help="Number of steps for generation")
-parser.add_argument('--cfg', type=float, default=2.0, help="CFG Scale")
-parser.add_argument('--lowres_denoise', type=float, default=0.9, help="Lowres Denoise (for initial latent)")
-parser.add_argument('--highres_scale', type=float, default=1.5, help="Highres Scale")
-parser.add_argument('--highres_denoise', type=float, default=0.5, help="Highres Denoise")
-parser.add_argument('--a_prompt', type=str, default='best quality', help="Added prompt")
-parser.add_argument('--n_prompt', type=str, default='lowres, bad anatomy, bad hands, cropped, worst quality, illustration, 3d, 2d, painting, cartoons, sketch', help="Negative prompt")
-parser.add_argument('--process_normal', type=str, default='False')
+parser = argparse.ArgumentParser(
+    description="IC-Light (Relighting with Foreground Condition)"
+)
+parser.add_argument(
+    "--input_dir", type=str, required=True, help="Path to the input foreground dir"
+)
+parser.add_argument("--output_dir", type=str, required=True, help="Path to output dir")
+parser.add_argument(
+    "--prompt", type=str, required=True, help="Prompt for text-to-image generation"
+)
+parser.add_argument(
+    "--bg_source",
+    type=str,
+    choices=[e.value for e in BGSource],
+    default="None",
+    help="Lighting Preference (Initial Latent)",
+)
+parser.add_argument(
+    "--num_samples", type=int, default=1, help="Number of generated images"
+)
+parser.add_argument("--seed", type=int, default=12345, help="Random seed")
+parser.add_argument(
+    "--image_width", type=int, default=512, help="Width of the generated image"
+)
+parser.add_argument(
+    "--image_height", type=int, default=640, help="Height of the generated image"
+)
+parser.add_argument(
+    "--steps", type=int, default=25, help="Number of steps for generation"
+)
+parser.add_argument("--cfg", type=float, default=2.0, help="CFG Scale")
+parser.add_argument(
+    "--lowres_denoise",
+    type=float,
+    default=0.9,
+    help="Lowres Denoise (for initial latent)",
+)
+parser.add_argument("--highres_scale", type=float, default=1.5, help="Highres Scale")
+parser.add_argument(
+    "--highres_denoise", type=float, default=0.5, help="Highres Denoise"
+)
+parser.add_argument("--a_prompt", type=str, default="best quality", help="Added prompt")
+parser.add_argument(
+    "--n_prompt",
+    type=str,
+    default="lowres, bad anatomy, bad hands, cropped, worst quality, illustration, 3d, 2d, painting, cartoons, sketch",
+    help="Negative prompt",
+)
+parser.add_argument("--process_normal", type=str, default="False")
 
 args = parser.parse_args()
 
@@ -418,11 +594,11 @@ if not os.path.exists(args.output_dir):
 
 # 指定フォルダ内の全ての画像ファイル名を取得
 image_files = sorted(os.listdir(args.input_dir))
-images = [f for f in image_files if f.endswith('.png')]
+images = [f for f in image_files if f.endswith(".png")]
 
 
 for image in images:
-    base_name = image.split('.')[0]
+    base_name = image.split(".")[0]
     image_path = os.path.join(args.input_dir, image)
 
     # Process function call with argparse arguments
@@ -443,7 +619,7 @@ for image in images:
             highres_scale=args.highres_scale,
             highres_denoise=args.highres_denoise,
             lowres_denoise=args.lowres_denoise,
-            bg_source=args.bg_source
+            bg_source=args.bg_source,
         )
     else:
         output_fg, results = process_relight(
@@ -460,13 +636,13 @@ for image in images:
             highres_scale=args.highres_scale,
             highres_denoise=args.highres_denoise,
             lowres_denoise=args.lowres_denoise,
-            bg_source=args.bg_source
+            bg_source=args.bg_source,
         )
 
     # Save or display results
     for i, result in enumerate(results):
         result_img = Image.fromarray(result)
-        if i==0:
+        if i == 0:
             save_path = os.path.join(args.output_dir, image)
             result_img.save(save_path)
         else:
