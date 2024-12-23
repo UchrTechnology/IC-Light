@@ -20,12 +20,21 @@ import argparse
 
 # 'stablediffusionapi/realistic-vision-v51'
 # 'runwayml/stable-diffusion-v1-5'
-sd15_name = 'stablediffusionapi/realistic-vision-v51'
-tokenizer = CLIPTokenizer.from_pretrained(sd15_name, subfolder="tokenizer")
-text_encoder = CLIPTextModel.from_pretrained(sd15_name, subfolder="text_encoder")
-vae = AutoencoderKL.from_pretrained(sd15_name, subfolder="vae")
-unet = UNet2DConditionModel.from_pretrained(sd15_name, subfolder="unet")
-rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
+#sd15_name = 'stablediffusionapi/realistic-vision-v51'
+#tokenizer = CLIPTokenizer.from_pretrained(sd15_name, subfolder="tokenizer")
+#text_encoder = CLIPTextModel.from_pretrained(sd15_name, subfolder="text_encoder")
+#vae = AutoencoderKL.from_pretrained(sd15_name, subfolder="vae")
+#unet = UNet2DConditionModel.from_pretrained(sd15_name, subfolder="unet")
+#rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
+
+# use downloaded weights
+local_sd15_path = './models/realistic-vision-v51'
+local_rmbg_path = './models/briaai-RMBG-1.4'
+tokenizer = CLIPTokenizer.from_pretrained(f"{local_sd15_path}/tokenizer")
+text_encoder = CLIPTextModel.from_pretrained(f"{local_sd15_path}/text_encoder")
+vae = AutoencoderKL.from_pretrained(f"{local_sd15_path}/vae")
+unet = UNet2DConditionModel.from_pretrained(f"{local_sd15_path}/unet")
+rmbg = BriaRMBG.from_pretrained(local_rmbg_path)
 
 # Change UNet
 
