@@ -28,8 +28,8 @@ import argparse
 #rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
 
 # use downloaded weights
-local_sd15_path = './models/realistic-vision-v51'
-local_rmbg_path = './models/briaai-RMBG-1.4'
+local_sd15_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/realistic-vision-v51'
+local_rmbg_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/briaai-RMBG-1.4'
 tokenizer = CLIPTokenizer.from_pretrained(f"{local_sd15_path}/tokenizer")
 text_encoder = CLIPTextModel.from_pretrained(f"{local_sd15_path}/text_encoder")
 vae = AutoencoderKL.from_pretrained(f"{local_sd15_path}/vae")
