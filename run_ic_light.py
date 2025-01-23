@@ -444,6 +444,7 @@ parser.add_argument('--highres_denoise', type=float, default=0.5, help="Highres 
 parser.add_argument('--a_prompt', type=str, default='best quality', help="Added prompt")
 parser.add_argument('--n_prompt', type=str, default='lowres, bad anatomy, bad hands, cropped, worst quality, illustration, 3d, 2d, painting, cartoons, sketch', help="Negative prompt")
 parser.add_argument('--source_info_file', type=str, required=True, help="Path to the light source file")
+parser.add_argument('--color_info_file', type=str, required=True, help="Path to the hair color file")
 
 args = parser.parse_args()
 
@@ -455,21 +456,27 @@ if not os.path.exists(args.output_dir):
 image_files = sorted(os.listdir(args.input_dir))
 images = [f for f in image_files if f.endswith('.png')]
 
-# 光源推定結果を読み込んで、各行をリストとして保持
+# 光源推定結果、髪色推定結果を読み込んで、各行をリストとして保持
 with open(args.source_info_file, "r") as file:
     light_directions = [line.strip() for line in file]
+with open(args.color_info_file, "r") as file:
+    hair_colors = [line.strip() for line in file]
 
-for image, light_source in zip(images, light_directions):
+for image, light_source, hair_color in zip(images, light_directions, hair_colors):
     base_name = image.split('.')[0]
     image_path = os.path.join(args.input_dir, image)
 
     # Process function call with argparse arguments
     input_fg = np.array(Image.open(image_path))
 
+    prompt = args.prompt
+    if hair_color == "gray hair":
+        prompt = prompt + ", gray hair"
+
     if light_source == "Left":
         output_fg, results = process_left(
             input_fg=input_fg,
-            prompt=args.prompt,
+            prompt=prompt,
             image_width=args.image_width,
             image_height=args.image_height,
             num_samples=args.num_samples,
@@ -486,7 +493,7 @@ for image, light_source in zip(images, light_directions):
     elif light_source == "Left_High":
         output_fg, results = process_left_high(
             input_fg=input_fg,
-            prompt=args.prompt,
+            prompt=prompt,
             image_width=args.image_width,
             image_height=args.image_height,
             num_samples=args.num_samples,
@@ -503,7 +510,7 @@ for image, light_source in zip(images, light_directions):
     elif light_source == "Right":
         output_fg, results = process_right(
             input_fg=input_fg,
-            prompt=args.prompt,
+            prompt=prompt,
             image_width=args.image_width,
             image_height=args.image_height,
             num_samples=args.num_samples,
@@ -520,7 +527,7 @@ for image, light_source in zip(images, light_directions):
     elif light_source == "Right_High":
         output_fg, results = process_right_high(
             input_fg=input_fg,
-            prompt=args.prompt,
+            prompt=prompt,
             image_width=args.image_width,
             image_height=args.image_height,
             num_samples=args.num_samples,
@@ -537,7 +544,7 @@ for image, light_source in zip(images, light_directions):
     else:
         output_fg, results = process_center(
             input_fg=input_fg,
-            prompt=args.prompt,
+            prompt=prompt,
             image_width=args.image_width,
             image_height=args.image_height,
             num_samples=args.num_samples,
