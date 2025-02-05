@@ -442,7 +442,7 @@ parser.add_argument('--lowres_denoise', type=float, default=0.9, help="Lowres De
 parser.add_argument('--highres_scale', type=float, default=1.5, help="Highres Scale")
 parser.add_argument('--highres_denoise', type=float, default=0.5, help="Highres Denoise")
 parser.add_argument('--a_prompt', type=str, default='best quality', help="Added prompt")
-parser.add_argument('--n_prompt', type=str, default='lowres, bad anatomy, bad hands, cropped, worst quality, illustration, 3d, 2d, painting, cartoons, sketch', help="Negative prompt")
+parser.add_argument('--n_prompt', type=str, default='lowres, bad anatomy, bad hands, cropped, worst quality, illustration, 3d, 2d, painting, cartoons, sketch, shadow, shade', help="Negative prompt")
 parser.add_argument('--source_info_file', type=str, required=True, help="Path to the light source file")
 parser.add_argument('--color_info_file', type=str, required=True, help="Path to the hair color file")
 
