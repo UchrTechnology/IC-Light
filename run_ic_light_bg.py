@@ -18,23 +18,24 @@ from torch.hub import download_url_to_file
 import argparse
 
 
-# 'stablediffusionapi/realistic-vision-v51'
-# 'runwayml/stable-diffusion-v1-5'
-#sd15_name = 'stablediffusionapi/realistic-vision-v51'
-#tokenizer = CLIPTokenizer.from_pretrained(sd15_name, subfolder="tokenizer")
-#text_encoder = CLIPTextModel.from_pretrained(sd15_name, subfolder="text_encoder")
-#vae = AutoencoderKL.from_pretrained(sd15_name, subfolder="vae")
-#unet = UNet2DConditionModel.from_pretrained(sd15_name, subfolder="unet")
-#rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
-
-# use downloaded weights
-local_sd15_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/realistic-vision-v51'
-local_rmbg_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/briaai-RMBG-1.4'
-tokenizer = CLIPTokenizer.from_pretrained(f"{local_sd15_path}/tokenizer")
-text_encoder = CLIPTextModel.from_pretrained(f"{local_sd15_path}/text_encoder")
-vae = AutoencoderKL.from_pretrained(f"{local_sd15_path}/vae")
-unet = UNet2DConditionModel.from_pretrained(f"{local_sd15_path}/unet")
-rmbg = BriaRMBG.from_pretrained(local_rmbg_path)
+if os.path.isdir("/app/iei-seisaku-pipe-v3"):
+    # use downloaded weights
+    local_sd15_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/realistic-vision-v51'
+    local_rmbg_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/briaai-RMBG-1.4'
+    tokenizer = CLIPTokenizer.from_pretrained(f"{local_sd15_path}/tokenizer")
+    text_encoder = CLIPTextModel.from_pretrained(f"{local_sd15_path}/text_encoder")
+    vae = AutoencoderKL.from_pretrained(f"{local_sd15_path}/vae")
+    unet = UNet2DConditionModel.from_pretrained(f"{local_sd15_path}/unet")
+    rmbg = BriaRMBG.from_pretrained(local_rmbg_path)
+else:
+    # 'stablediffusionapi/realistic-vision-v51'
+    # 'runwayml/stable-diffusion-v1-5'
+    sd15_name = 'stablediffusionapi/realistic-vision-v51'
+    tokenizer = CLIPTokenizer.from_pretrained(sd15_name, subfolder="tokenizer")
+    text_encoder = CLIPTextModel.from_pretrained(sd15_name, subfolder="text_encoder")
+    vae = AutoencoderKL.from_pretrained(sd15_name, subfolder="vae")
+    unet = UNet2DConditionModel.from_pretrained(sd15_name, subfolder="unet")
+    rmbg = BriaRMBG.from_pretrained("briaai/RMBG-1.4")
 
 # Change UNet
 
@@ -60,9 +61,11 @@ unet.forward = hooked_unet_forward
 
 # Load
 
-model_path = './models/iclight_sd15_fbc.safetensors'
-
+model_path = '/app/iei-seisaku-pipe-v3/IC-Light/models/iclight_sd15_fbc.safetensors'
 if not os.path.exists(model_path):
+    model_path = './models/iclight_sd15_fbc.safetensors'
+if not os.path.exists(model_path):
+    print("download iclight model")
     download_url_to_file(url='https://huggingface.co/lllyasviel/ic-light/resolve/main/iclight_sd15_fbc.safetensors', dst=model_path)
 
 sd_offset = sf.load_file(model_path)
